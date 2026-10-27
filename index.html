@@ -1,0 +1,3067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Image axis rotation</title>
+  <style>
+    :root {
+      --bg: #ebe6dc;
+      --paper: #f7f4ee;
+      --ink: #1c1915;
+      --muted: #6d675e;
+      --line: #ddd6c8;
+      --line-strong: #cfc6b6;
+      --accent: #1f3a5f;
+      --x: #9a3412;
+      --y: #1f6b4a;
+      --z: #1f3a5f;
+    }
+
+    * { box-sizing: border-box; }
+
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+    }
+
+    h2 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .lead {
+      margin: 0 0 28px;
+      max-width: 64ch;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.55fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .layout > section {
+      display: flex;
+      flex-direction: column;
+      grid-column: 2;
+      grid-row: 1;
+      min-width: 0;
+    }
+
+    .layout > .side {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .stage {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--paper);
+    }
+
+    .viewport {
+      position: relative;
+      height: 520px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      background: #e4dfd4;
+      container-type: inline-size;
+      user-select: none;
+    }
+
+    .viewport.is-dragover {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .floor {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      perspective: 1100px;
+      perspective-origin: 50% 42%;
+      pointer-events: none;
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      perspective: 1100px;
+      perspective-origin: 50% 42%;
+      transform-style: preserve-3d;
+    }
+
+    .ground {
+      position: absolute;
+      left: -8%;
+      right: -8%;
+      top: 68%;
+      height: 80%;
+      background-color: #d9d3c6;
+      background-image:
+        linear-gradient(to right, rgba(28, 25, 21, 0.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(28, 25, 21, 0.08) 1px, transparent 1px);
+      background-size: 28px 28px;
+      transform: rotateX(78deg);
+      transform-origin: center top;
+    }
+
+    .card-slot {
+      position: absolute;
+      left: 50%;
+      top: 44%;
+      transform: translate(-50%, -50%);
+      transform-style: preserve-3d;
+    }
+
+    .card {
+      position: relative;
+      width: min(420px, calc(100cqi - 64px));
+      height: 270px;
+      overflow: visible;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: var(--paper);
+      transform-style: preserve-3d;
+    }
+
+    .card.has-images {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .preview {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+    }
+
+    .preview:empty { display: none; }
+
+    .plane {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      overflow: visible;
+      border: 0;
+      border-radius: 12px;
+      background: transparent;
+      transform-origin: center center;
+      transform-style: preserve-3d;
+    }
+
+    .plane-vector {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .vector-defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+    }
+
+    .vector-fill,
+    .blue-overlay,
+    .inner-stroke {
+      pointer-events: none;
+    }
+
+    .blue-overlay {
+      mix-blend-mode: multiply;
+    }
+
+    .inner-stroke {
+      fill: none;
+    }
+
+    .placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .front-tag {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .placeholder-icon {
+      width: 88px;
+      height: 88px;
+      color: var(--ink);
+    }
+
+    .placeholder p {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .angles {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      min-width: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 14px;
+    }
+
+    .angle {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      color: var(--ink);
+      font-weight: 400;
+    }
+
+    .angle-readout {
+      font-weight: 400;
+    }
+
+    .angle-x { color: var(--x); }
+    .angle-y { color: var(--y); }
+    .angle-z { color: var(--z); }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .panel {
+      width: 100%;
+      min-width: 0;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--paper);
+    }
+
+    .tabs {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      margin: 0 -20px 16px;
+      padding: 0 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    button,
+    .upload {
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .tab {
+      position: relative;
+      flex: none;
+      height: auto;
+      padding: 8px 12px 11px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--ink);
+      line-height: 1.2;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .tab:hover {
+      color: var(--ink);
+      background: rgba(28, 25, 21, 0.06);
+      border-radius: 8px;
+    }
+
+    .tab.is-selected {
+      background: transparent;
+      color: var(--accent);
+    }
+
+    .tab.is-selected:hover {
+      background: rgba(31, 58, 95, 0.06);
+    }
+
+    .tab.is-selected::after {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: -1px;
+      height: 3px;
+      border-radius: 3px 3px 0 0;
+      background: var(--accent);
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+      min-width: 0;
+    }
+
+    .panel-head > div:first-child {
+      min-width: 0;
+    }
+
+    .panel-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .gizmo-stage {
+      width: 88px;
+      height: 88px;
+      flex: none;
+      perspective: 360px;
+    }
+
+    .gizmo {
+      position: relative;
+      width: 88px;
+      height: 88px;
+      transform-style: preserve-3d;
+    }
+
+    .arm {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 34px;
+      height: 2px;
+      transform-origin: left center;
+    }
+
+    .arm i {
+      position: absolute;
+      left: 38px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-style: normal;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .arm-x { background: var(--x); color: var(--x); }
+    .arm-y { background: var(--y); color: var(--y); transform: rotateZ(-90deg); }
+    .arm-z { background: var(--z); color: var(--z); transform: rotateY(90deg); }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .upload,
+    .examples,
+    .reset {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 36px;
+      padding: 0 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .upload {
+      gap: 8px;
+      background: var(--accent);
+      color: var(--paper);
+    }
+
+    .upload-icon {
+      width: 16px;
+      height: 16px;
+      flex: none;
+      color: #fff;
+    }
+
+    .upload.is-disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .examples,
+    .reset {
+      border: 1px solid var(--line-strong);
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .reset {
+      margin-left: auto;
+    }
+
+    .examples:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .filename,
+    .status {
+      margin: 8px 0 0;
+      min-height: 1.2em;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status:empty { display: none; }
+    .status { color: var(--x); }
+
+    .axes {
+      margin-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .axis {
+      padding-top: 16px;
+    }
+
+    .disclosure-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 16px;
+      padding: 0 0 12px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .disclosure-icon {
+      display: block;
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+      rotate: 0deg;
+    }
+
+    .disclosure-toggle[aria-expanded="true"] .disclosure-icon {
+      rotate: 90deg;
+    }
+
+    .disclosure-icon svg {
+      display: block;
+      width: 16px;
+      height: 16px;
+    }
+
+    #blue-controls {
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .axis-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .axis-name {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .axis[data-axis="x"] .axis-name { color: var(--x); }
+    .axis[data-axis="y"] .axis-name { color: var(--y); }
+    .axis[data-axis="z"] .axis-name { color: var(--z); }
+
+    .axis-hint {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .axis-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 5.5rem;
+      gap: 12px;
+      align-items: center;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 16px;
+      margin: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    input[type="range"]:focus-visible {
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 2px;
+      border-radius: 999px;
+      background: linear-gradient(to right, var(--accent) var(--fill, 50%), var(--line-strong) var(--fill, 50%));
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      margin-top: -7px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 2px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--line-strong);
+    }
+
+    input[type="range"]::-moz-range-progress {
+      height: 2px;
+      background: var(--accent);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .field {
+      display: flex;
+      align-items: center;
+      height: 36px;
+      padding-right: 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .field:focus-within {
+      border-color: var(--accent);
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    .field input {
+      width: 100%;
+      min-width: 0;
+      height: 100%;
+      padding: 0 4px 0 8px;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: 14px/1 ui-monospace, "SF Mono", Menlo, monospace;
+      text-align: right;
+    }
+
+    .field input:focus { outline: none; }
+
+    .field span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .upload:focus-within,
+    .examples:focus-visible,
+    .reset:focus-visible,
+    .sort:focus-visible,
+    .export-toggle button:focus-visible,
+    .export-format:focus-visible,
+    #export:focus-visible,
+    #share:focus-visible,
+    .handle:focus-visible,
+    .bin:focus-visible,
+    .tab:focus-visible,
+    .disclosure-toggle:focus-visible,
+    .save-position:focus-visible,
+    .position-name:focus-visible,
+    .saved-positions:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .positions {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .save-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .position-name,
+    .saved-positions {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      color: inherit;
+      font: 14px/1 inherit;
+    }
+
+    .position-name { padding: 0 10px; }
+
+    .saved-positions {
+      margin-top: 8px;
+      padding: 0 8px;
+    }
+
+    .save-position {
+      height: 36px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: var(--paper);
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .save-position:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .list-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .sort {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .sort-icon {
+      display: block;
+      width: 16px;
+      height: 16px;
+      scale: 1 1;
+      transform-origin: center;
+      transition: scale 160ms ease;
+    }
+
+    .sort-icon svg {
+      display: block;
+      width: 16px;
+      height: 16px;
+    }
+
+    .sort[aria-pressed="true"] .sort-icon {
+      scale: 1 -1;
+    }
+
+    .image-note {
+      margin: 8px 0 0;
+      color: var(--x);
+      font-size: 13px;
+    }
+
+    .image-note:empty { display: none; }
+
+    .image-list {
+      list-style: none;
+      margin: 8px 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .image-row,
+    .image-gap,
+    .image-slot {
+      display: grid;
+      grid-template-columns: 28px 28px minmax(0, 1fr) 32px;
+      align-items: center;
+      gap: 4px;
+      min-height: 36px;
+      margin: 0;
+      padding: 0 2px;
+      border-radius: 8px;
+    }
+
+    .image-slot {
+      border: 1px dashed var(--line-strong);
+      pointer-events: none;
+    }
+
+    .image-gap {
+      display: block;
+      border: 1px dashed var(--line-strong);
+    }
+
+    .image-row.is-dragging {
+      background: var(--paper);
+      border: 1px solid var(--line-strong);
+    }
+
+    .handle,
+    .bin {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .handle {
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .handle:active { cursor: grabbing; }
+
+    .handle svg,
+    .bin svg {
+      display: block;
+      width: 16px;
+      height: 16px;
+    }
+
+    .image-row input[type="checkbox"],
+    .glow-toggle input {
+      width: 16px;
+      height: 16px;
+      margin: 0 auto;
+      accent-color: var(--accent);
+    }
+
+    .glow-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .glow-toggle input {
+      margin: 0;
+    }
+
+    .image-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+
+    .spacing {
+      margin-top: 14px;
+    }
+
+    .spacing-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .export-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px 16px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
+      background: var(--paper);
+    }
+
+    .export-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    .export-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 36px;
+      padding: 0 4px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: var(--paper);
+    }
+
+    .export-toggle button {
+      height: 28px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .export-toggle button.is-selected {
+      background: var(--accent);
+      color: var(--paper);
+    }
+
+    .export-format {
+      height: 36px;
+      padding: 0 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #fff;
+      color: inherit;
+      font: 14px/1 inherit;
+    }
+
+    #export {
+      height: 36px;
+      padding: 0 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: var(--paper);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #export:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .share-wrap {
+      position: relative;
+      display: inline-flex;
+    }
+
+    #share {
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink);
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .share-popup {
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% - 4px);
+      transform: translateX(-50%);
+      z-index: 3;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: var(--ink);
+      color: var(--paper);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    @media (max-width: 800px) {
+      main { padding: 24px 16px 48px; }
+      .layout { grid-template-columns: 1fr; }
+      .layout > section,
+      .layout > .side { grid-column: auto; grid-row: auto; }
+      .viewport { height: 420px; }
+      .axis-hint { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <svg class="vector-defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="inner-stroke-gradient" x1="0" y1="1" x2="1" y2="0">
+        <stop offset="0" stop-color="#56739C"/>
+        <stop offset="0.5" stop-color="#1B1D22"/>
+        <stop offset="1" stop-color="#56739C"/>
+      </linearGradient>
+    </defs>
+  </svg>
+  <main>
+    <header>
+      <h1>Tech Stack Visualizer</h1>
+      <p class="lead">Upload up to 10 images, then set whole-number degrees for the X, Y, and Z axes. The slider and the text field for each axis change the same integer.</p>
+    </header>
+
+    <div class="layout">
+      <section aria-label="Preview">
+        <div class="stage">
+        <div class="viewport" id="viewport">
+          <div class="floor" aria-hidden="true">
+            <div class="ground"></div>
+          </div>
+          <div class="scene">
+            <div class="card-slot">
+              <div class="card" id="card" data-x="62" data-y="-28" data-z="14">
+                <div class="preview" id="preview"></div>
+                <div class="placeholder" id="placeholder">
+                  <span class="front-tag">Front</span>
+                  <svg class="placeholder-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M23 4C23 2.34315 21.6569 1 20 1H4C2.34315 1 1 2.34315 1 4V20C1 21.6569 2.34315 23 4 23H20C21.6569 23 23 21.6569 23 20V4ZM21 4C21 3.44772 20.5523 3 20 3H4C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4Z"/>
+                    <path fill="currentColor" d="M4.80665 17.5211L9.1221 9.60947C9.50112 8.91461 10.4989 8.91461 10.8779 9.60947L14.0465 15.4186L15.1318 13.5194C15.5157 12.8476 16.4843 12.8476 16.8682 13.5194L19.1451 17.5039C19.526 18.1705 19.0446 19 18.2768 19H5.68454C4.92548 19 4.44317 18.1875 4.80665 17.5211Z"/>
+                    <path fill="currentColor" d="M18 8C18 9.10457 17.1046 10 16 10C14.8954 10 14 9.10457 14 8C14 6.89543 14.8954 6 16 6C17.1046 6 18 6.89543 18 8Z"/>
+                  </svg>
+                  <p>Drop an image here</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="export-bar">
+          <div class="angles" aria-live="polite">
+            <span class="angle"><span class="angle-x">X</span><span class="angle-readout"><span id="value-x">62</span>°</span></span>
+            <span class="angle"><span class="angle-y">Y</span><span class="angle-readout"><span id="value-y">-28</span>°</span></span>
+            <span class="angle"><span class="angle-z">Z</span><span class="angle-readout"><span id="value-z">14</span>°</span></span>
+            <span class="angle"><span>Dis.</span><span class="angle-readout"><span id="value-distance">40</span>px</span></span>
+          </div>
+          <div class="export-actions">
+            <div class="export-toggle" role="group" aria-label="Export mode">
+              <button type="button" id="export-all" class="is-selected" aria-pressed="true">All</button>
+              <button type="button" id="export-individual" aria-pressed="false">Individual</button>
+            </div>
+            <select id="export-format" class="export-format" aria-label="File type">
+              <option value="png">PNG</option>
+              <option value="jpg">JPG</option>
+            </select>
+            <span class="share-wrap">
+              <span class="share-popup" id="share-popup" role="status" hidden>Copied to clipboard</span>
+              <button type="button" id="share">Share</button>
+            </span>
+            <button type="button" id="export" disabled>Export</button>
+          </div>
+        </div>
+        </div>
+      </section>
+
+      <div class="side">
+      <form class="panel" id="controls" autocomplete="off">
+        <div class="tabs" role="tablist" aria-label="Panel">
+          <button type="button" class="tab is-selected" id="tab-images" role="tab" aria-selected="true" aria-controls="panel-images" tabindex="0">Images</button>
+          <button type="button" class="tab" id="tab-axes" role="tab" aria-selected="false" aria-controls="panel-axes" tabindex="-1">Axes</button>
+          <button type="button" class="tab" id="tab-adjust" role="tab" aria-selected="false" aria-controls="panel-adjust" tabindex="-1">Adjust</button>
+        </div>
+
+        <div id="panel-images" role="tabpanel" aria-labelledby="tab-images">
+          <div class="actions">
+            <label class="upload" id="upload">
+              <svg class="upload-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M23 4C23 2.34315 21.6569 1 20 1H4C2.34315 1 1 2.34315 1 4V20C1 21.6569 2.34315 23 4 23H20C21.6569 23 23 21.6569 23 20V4ZM21 4C21 3.44772 20.5523 3 20 3H4C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4Z"/>
+                <path fill="currentColor" d="M4.80665 17.5211L9.1221 9.60947C9.50112 8.91461 10.4989 8.91461 10.8779 9.60947L14.0465 15.4186L15.1318 13.5194C15.5157 12.8476 16.4843 12.8476 16.8682 13.5194L19.1451 17.5039C19.526 18.1705 19.0446 19 18.2768 19H5.68454C4.92548 19 4.44317 18.1875 4.80665 17.5211Z"/>
+                <path fill="currentColor" d="M18 8C18 9.10457 17.1046 10 16 10C14.8954 10 14 9.10457 14 8C14 6.89543 14.8954 6 16 6C17.1046 6 18 6.89543 18 8Z"/>
+              </svg>
+              Choose image
+              <input id="file" class="visually-hidden" type="file" accept="image/*" multiple>
+            </label>
+            <button type="button" class="examples" id="add-examples">Add Examples</button>
+          </div>
+          <p class="filename" id="image-count">0/10 images</p>
+          <p class="image-note" id="image-note" role="status"></p>
+          <div class="list-tools">
+            <button type="button" class="sort" id="sort-images" aria-pressed="false">
+              <span class="sort-icon">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M4 12.5V3.5M4 3.5 1.6 5.9M4 3.5l2.4 2.4"/>
+                  <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M12 3.5v9M12 12.5l-2.4-2.4M12 12.5l2.4-2.4"/>
+                </svg>
+              </span>
+              <span>Sort</span>
+            </button>
+            <button type="button" class="reset" id="reset">Reset</button>
+          </div>
+          <ul class="image-list" id="image-list"></ul>
+        </div>
+
+        <div id="panel-axes" role="tabpanel" aria-labelledby="tab-axes" hidden>
+        <div class="panel-head">
+          <div>
+            <h2>Axes</h2>
+            <p class="panel-note">Whole degrees from -180 to 180. Applied in order X, then Y, then Z.</p>
+          </div>
+          <div class="gizmo-stage" aria-hidden="true">
+            <div class="gizmo" id="gizmo">
+              <span class="arm arm-x"><i>X</i></span>
+              <span class="arm arm-y"><i>Y</i></span>
+              <span class="arm arm-z"><i>Z</i></span>
+            </div>
+          </div>
+        </div>
+
+        <p class="status" id="status" role="status"></p>
+
+        <div class="axes">
+          <div class="axis" data-axis="x">
+            <div class="axis-label">
+              <span class="axis-name" id="label-x">X</span>
+              <span class="axis-hint" id="hint-x">Around the horizontal axis</span>
+            </div>
+            <div class="axis-controls">
+              <input id="slider-x" type="range" min="-180" max="180" step="1" value="62" aria-labelledby="label-x" aria-describedby="hint-x">
+              <div class="field">
+                <input id="field-x" type="text" inputmode="numeric" maxlength="4" value="62" autocomplete="off" spellcheck="false" aria-labelledby="label-x" aria-describedby="hint-x">
+                <span aria-hidden="true">°</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="axis" data-axis="y">
+            <div class="axis-label">
+              <span class="axis-name" id="label-y">Y</span>
+              <span class="axis-hint" id="hint-y">Around the vertical axis</span>
+            </div>
+            <div class="axis-controls">
+              <input id="slider-y" type="range" min="-180" max="180" step="1" value="-28" aria-labelledby="label-y" aria-describedby="hint-y">
+              <div class="field">
+                <input id="field-y" type="text" inputmode="numeric" maxlength="4" value="-28" autocomplete="off" spellcheck="false" aria-labelledby="label-y" aria-describedby="hint-y">
+                <span aria-hidden="true">°</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="axis" data-axis="z">
+            <div class="axis-label">
+              <span class="axis-name" id="label-z">Z</span>
+              <span class="axis-hint" id="hint-z">Around the depth axis</span>
+            </div>
+            <div class="axis-controls">
+              <input id="slider-z" type="range" min="-180" max="180" step="1" value="14" aria-labelledby="label-z" aria-describedby="hint-z">
+              <div class="field">
+                <input id="field-z" type="text" inputmode="numeric" maxlength="4" value="14" autocomplete="off" spellcheck="false" aria-labelledby="label-z" aria-describedby="hint-z">
+                <span aria-hidden="true">°</span>
+              </div>
+            </div>
+          </div>
+          <div class="spacing">
+            <div class="spacing-head">
+              <span id="y-distance-label">Y distance</span>
+              <span class="spacing-value" id="y-distance-value">40px</span>
+            </div>
+            <input id="y-distance" type="range" min="4" max="400" step="1" value="40" aria-labelledby="y-distance-label">
+          </div>
+        </div>
+
+        <div class="positions">
+          <div class="save-row">
+            <input id="position-name" class="position-name" type="text" placeholder="Name" aria-label="Position name" autocomplete="off" spellcheck="false">
+            <button type="button" class="save-position" id="save-position" disabled>Save Position</button>
+          </div>
+          <select id="saved-positions" class="saved-positions" aria-label="Saved positions"></select>
+        </div>
+        </div>
+
+        <div id="panel-adjust" role="tabpanel" aria-labelledby="tab-adjust" hidden>
+          <button type="button" class="disclosure-toggle" id="adjustments-toggle" aria-expanded="false" aria-controls="adjustments-panel">
+            Adjustments
+            <span class="disclosure-icon" aria-hidden="true">
+              <svg viewBox="0 0 16 16">
+                <path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M6 3.5 10.5 8 6 12.5"/>
+              </svg>
+            </span>
+          </button>
+          <div id="adjustments-panel" hidden>
+          <div class="axis">
+            <div class="axis-label">
+              <span class="axis-name" id="label-saturation">Saturation</span>
+              <span class="axis-hint" id="value-saturation">100%</span>
+            </div>
+            <input id="slider-saturation" type="range" min="0" max="200" step="1" value="100" aria-labelledby="label-saturation">
+          </div>
+          <div class="axis">
+            <div class="axis-label">
+              <span class="axis-name" id="label-hue">Hue</span>
+              <span class="axis-hint" id="value-hue">0°</span>
+            </div>
+            <input id="slider-hue" type="range" min="-180" max="180" step="1" value="0" aria-labelledby="label-hue">
+          </div>
+          <div class="axis">
+            <div class="axis-label">
+              <span class="axis-name" id="label-contrast">Contrast</span>
+              <span class="axis-hint" id="value-contrast">100%</span>
+            </div>
+            <input id="slider-contrast" type="range" min="0" max="200" step="1" value="100" aria-labelledby="label-contrast">
+          </div>
+          <div class="axis">
+            <div class="axis-label">
+              <span class="axis-name" id="label-brightness">Brightness</span>
+              <span class="axis-hint" id="value-brightness">100%</span>
+            </div>
+            <input id="slider-brightness" type="range" min="0" max="200" step="1" value="100" aria-labelledby="label-brightness">
+          </div>
+          </div>
+          <label class="glow-toggle">
+            <input id="blue-overlay" type="checkbox" checked>
+            Blue Overlay
+          </label>
+          <div id="blue-controls">
+            <div class="axis">
+              <div class="axis-label">
+                <span class="axis-name" id="label-blue-opacity">Opacity</span>
+                <span class="axis-hint" id="value-blue-opacity">50%</span>
+              </div>
+              <input id="slider-blue-opacity" type="range" min="0" max="100" step="1" value="50" aria-labelledby="label-blue-opacity">
+            </div>
+          </div>
+          <label class="glow-toggle">
+            <input id="outer-glow" type="checkbox" checked>
+            Outer glow
+          </label>
+          <div id="glow-controls">
+            <div class="axis">
+              <div class="axis-label">
+                <span class="axis-name" id="label-blur">Blur</span>
+                <span class="axis-hint" id="value-blur">40px</span>
+              </div>
+              <input id="slider-blur" type="range" min="0" max="80" step="1" value="40" aria-labelledby="label-blur">
+            </div>
+            <div class="axis">
+              <div class="axis-label">
+                <span class="axis-name" id="label-spread">Spread</span>
+                <span class="axis-hint" id="value-spread">6px</span>
+              </div>
+              <input id="slider-spread" type="range" min="0" max="40" step="1" value="6" aria-labelledby="label-spread">
+            </div>
+            <div class="axis">
+              <div class="axis-label">
+                <span class="axis-name" id="label-opacity">Opacity</span>
+                <span class="axis-hint" id="value-opacity">24%</span>
+              </div>
+              <input id="slider-opacity" type="range" min="0" max="100" step="1" value="24" aria-labelledby="label-opacity">
+            </div>
+          </div>
+          <label class="glow-toggle">
+            <input id="inner-stroke" type="checkbox" checked>
+            Inner Stroke
+          </label>
+          <div class="positions">
+            <div class="save-row">
+              <input id="preset-name" class="position-name" type="text" placeholder="Name" aria-label="Preset name" autocomplete="off" spellcheck="false">
+              <button type="button" class="save-position" id="save-preset" disabled>Save Presets</button>
+            </div>
+            <select id="saved-presets" class="saved-positions" aria-label="Saved presets"></select>
+          </div>
+        </div>
+      </form>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const MIN_DEG = -180;
+    const MAX_DEG = 180;
+
+    let rotationX = 62;
+    let rotationY = -28;
+    let rotationZ = 14;
+
+    const MAX_IMAGES = 10;
+    const viewport = document.getElementById("viewport");
+    const card = document.getElementById("card");
+    const gizmo = document.getElementById("gizmo");
+    const preview = document.getElementById("preview");
+    const placeholder = document.getElementById("placeholder");
+    const fileInput = document.getElementById("file");
+    const uploadLabel = document.getElementById("upload");
+    const addExamplesButton = document.getElementById("add-examples");
+    const imageCount = document.getElementById("image-count");
+    const imageNote = document.getElementById("image-note");
+    const imageList = document.getElementById("image-list");
+    const sortButton = document.getElementById("sort-images");
+    const exportButton = document.getElementById("export");
+    const exportFormat = document.getElementById("export-format");
+    const status = document.getElementById("status");
+    const valueX = document.getElementById("value-x");
+    const valueY = document.getElementById("value-y");
+    const valueZ = document.getElementById("value-z");
+    const valueDistance = document.getElementById("value-distance");
+
+    const GRIP_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6" cy="4" r="1.15" fill="currentColor"/><circle cx="10" cy="4" r="1.15" fill="currentColor"/><circle cx="6" cy="8" r="1.15" fill="currentColor"/><circle cx="10" cy="8" r="1.15" fill="currentColor"/><circle cx="6" cy="12" r="1.15" fill="currentColor"/><circle cx="10" cy="12" r="1.15" fill="currentColor"/></svg>';
+    const BIN_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M3.5 4.5h9M6.2 4.5V3.2h3.6v1.3M4.6 4.5l.5 8.2h5.8l.5-8.2"/></svg>';
+
+    const Y_DISTANCE_MIN = 4;
+    const Y_DISTANCE_MAX = 400;
+    const yDistanceSlider = document.getElementById("y-distance");
+    const yDistanceValue = document.getElementById("y-distance-value");
+
+    let images = [];
+    let nextImageId = 1;
+    let listReversed = false;
+    let yDistance = 40;
+
+    function rotationFor(axis) {
+      if (axis === "x") return rotationX;
+      if (axis === "y") return rotationY;
+      return rotationZ;
+    }
+
+    function setRotation(axis, value) {
+      if (axis === "x") rotationX = value;
+      else if (axis === "y") rotationY = value;
+      else rotationZ = value;
+    }
+
+    function clampInt(value) {
+      const parsed = Number.parseInt(String(value), 10);
+      if (!Number.isInteger(parsed)) return null;
+      if (parsed < MIN_DEG) return MIN_DEG;
+      if (parsed > MAX_DEG) return MAX_DEG;
+      return parsed;
+    }
+
+    let saturation = 100;
+    let hue = 0;
+    let contrast = 100;
+    let brightness = 100;
+    let outerGlow = true;
+    let blueOverlay = true;
+    let blueOpacity = 50;
+    let innerStroke = true;
+    let glowBlur = 40;
+    let glowSpread = 6;
+    let glowOpacity = 24;
+
+    const GLOW_LIMITS = {
+      blur: { min: 0, max: 80, suffix: "px" },
+      spread: { min: 0, max: 40, suffix: "px" },
+      opacity: { min: 0, max: 100, suffix: "%" }
+    };
+
+    function imageFilter() {
+      return "saturate(" + saturation + "%) hue-rotate(" + hue + "deg) contrast(" + contrast + "%) brightness(" + brightness + "%)";
+    }
+
+    function glowValue(id) {
+      if (id === "blur") return glowBlur;
+      if (id === "spread") return glowSpread;
+      return glowOpacity;
+    }
+
+    function glowColor() {
+      return glowOpacity >= 100 ? "#00A5E9" : "rgba(0, 165, 233, " + (glowOpacity / 100) + ")";
+    }
+
+    function glowLayers() {
+      const inner = Math.round((glowBlur * 8) / 18);
+      return inner === glowBlur ? [glowBlur] : [inner, glowBlur];
+    }
+
+    function glowBoxShadow() {
+      if (!outerGlow || glowOpacity <= 0) return "none";
+      const color = glowColor();
+      return glowLayers().map(function (blur) {
+        return "0 0 " + blur + "px " + glowSpread + "px " + color;
+      }).join(", ");
+    }
+
+    function glowPad() {
+      if (!outerGlow || glowOpacity <= 0) return 0;
+      return Math.ceil(glowBlur * 1.5 + glowSpread + 16);
+    }
+
+    function paintAdjustSlider(id, value, min, max) {
+      const slider = document.getElementById("slider-" + id);
+      const fill = ((value - min) / (max - min)) * 100;
+      slider.style.setProperty("--fill", fill + "%");
+    }
+
+    function applyAdjust() {
+      const filter = imageFilter();
+      for (const img of preview.querySelectorAll(".plane-vector image")) img.style.filter = filter;
+      document.getElementById("value-saturation").textContent = saturation + "%";
+      document.getElementById("value-hue").textContent = hue + "°";
+      document.getElementById("value-contrast").textContent = contrast + "%";
+      document.getElementById("value-brightness").textContent = brightness + "%";
+      paintAdjustSlider("saturation", saturation, 0, 200);
+      paintAdjustSlider("hue", hue, -180, 180);
+      paintAdjustSlider("contrast", contrast, 0, 200);
+      paintAdjustSlider("brightness", brightness, 0, 200);
+      const glow = glowBoxShadow();
+      for (const plane of preview.querySelectorAll(".plane")) {
+        plane.style.boxShadow = glow;
+        plane.style.filter = "none";
+      }
+      for (const id of ["blur", "spread", "opacity"]) {
+        const limits = GLOW_LIMITS[id];
+        const value = glowValue(id);
+        document.getElementById("value-" + id).textContent = value + limits.suffix;
+        paintAdjustSlider(id, value, limits.min, limits.max);
+      }
+      document.getElementById("glow-controls").hidden = !outerGlow;
+      document.getElementById("value-blue-opacity").textContent = blueOpacity + "%";
+      paintAdjustSlider("blue-opacity", blueOpacity, 0, 100);
+      document.getElementById("blue-controls").hidden = !blueOverlay;
+      for (const layer of preview.querySelectorAll(".plane-vector .blue-overlay")) {
+        layer.toggleAttribute("hidden", !blueOverlay);
+        layer.style.opacity = String(blueOpacity / 100);
+      }
+      for (const stroke of preview.querySelectorAll(".plane-vector .inner-stroke")) {
+        stroke.toggleAttribute("hidden", !innerStroke);
+      }
+    }
+
+    function setBlueOpacity(value) {
+      const next = Number.parseInt(value, 10);
+      if (!Number.isInteger(next)) return;
+      blueOpacity = Math.min(100, Math.max(0, next));
+      document.getElementById("slider-blue-opacity").value = String(blueOpacity);
+      applyAdjust();
+    }
+
+    function setGlow(id, value) {
+      const limits = GLOW_LIMITS[id];
+      const next = Number.parseInt(value, 10);
+      if (!Number.isInteger(next)) return;
+      const clamped = Math.min(limits.max, Math.max(limits.min, next));
+      if (id === "blur") glowBlur = clamped;
+      else if (id === "spread") glowSpread = clamped;
+      else glowOpacity = clamped;
+      document.getElementById("slider-" + id).value = String(clamped);
+      applyAdjust();
+    }
+
+    function setAdjust(id, value) {
+      const next = Number.parseInt(value, 10);
+      if (!Number.isInteger(next)) return;
+      if (id === "saturation") saturation = Math.min(200, Math.max(0, next));
+      else if (id === "hue") hue = Math.min(180, Math.max(-180, next));
+      else if (id === "contrast") contrast = Math.min(200, Math.max(0, next));
+      else brightness = Math.min(200, Math.max(0, next));
+      document.getElementById("slider-" + id).value = String(id === "hue" ? hue : id === "saturation" ? saturation : id === "contrast" ? contrast : brightness);
+      applyAdjust();
+    }
+
+    function paintSlider(axis, slider) {
+      const fill = ((rotationFor(axis) - MIN_DEG) / (MAX_DEG - MIN_DEG)) * 100;
+      slider.style.setProperty("--fill", fill + "%");
+    }
+
+    function rotationTransform() {
+      // CSS runs the rightmost function first, so X is applied, then Y, then Z.
+      return "rotateZ(" + rotationZ + "deg) rotateY(" + rotationY + "deg) rotateX(" + rotationX + "deg)";
+    }
+
+    function applyRotation() {
+      card.style.transform = "none";
+      gizmo.style.transform = rotationTransform();
+      card.dataset.x = String(rotationX);
+      card.dataset.y = String(rotationY);
+      card.dataset.z = String(rotationZ);
+      valueX.textContent = String(rotationX);
+      valueY.textContent = String(rotationY);
+      valueZ.textContent = String(rotationZ);
+      layoutPlanes();
+    }
+
+    function commit(axis, value, source) {
+      const next = clampInt(value);
+      if (next === null) return;
+      setRotation(axis, next);
+      const slider = document.getElementById("slider-" + axis);
+      const field = document.getElementById("field-" + axis);
+      slider.value = String(next);
+      const typed = Number.parseInt(field.value.trim(), 10);
+      if (source !== "field" || typed !== next) field.value = String(next);
+      paintSlider(axis, slider);
+      applyRotation();
+    }
+
+    function stageLimit() {
+      return {
+        maxW: Math.max(160, Math.min(440, viewport.clientWidth - 64)),
+        maxH: 320
+      };
+    }
+
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const PLANE_RADIUS = 12;
+    const SCENE_PERSPECTIVE = 1100;
+    const SCENE_ORIGIN_Y = 0.42;
+    const STACK_ANCHOR_Y = 0.44;
+
+    function svgEl(name) {
+      return document.createElementNS(SVG_NS, name);
+    }
+
+    function setRoundRect(rect, x, y, width, height, radius) {
+      rect.setAttribute("x", String(x));
+      rect.setAttribute("y", String(y));
+      rect.setAttribute("width", String(Math.max(0, width)));
+      rect.setAttribute("height", String(Math.max(0, height)));
+      rect.setAttribute("rx", String(Math.max(0, radius)));
+      rect.setAttribute("ry", String(Math.max(0, radius)));
+    }
+
+    function layoutVector(plane, width, height) {
+      const svg = plane.querySelector(".plane-vector");
+      if (!svg) return;
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      svg.setAttribute("width", String(width));
+      svg.setAttribute("height", String(height));
+      setRoundRect(svg.querySelector(".vector-shape"), 0, 0, width, height, PLANE_RADIUS);
+      const mask = svg.querySelector("mask");
+      mask.setAttribute("x", "0");
+      mask.setAttribute("y", "0");
+      mask.setAttribute("width", String(width));
+      mask.setAttribute("height", String(height));
+      const image = svg.querySelector("image");
+      image.setAttribute("x", "0");
+      image.setAttribute("y", "0");
+      image.setAttribute("width", String(width));
+      image.setAttribute("height", String(height));
+    }
+
+    function buildPlaneVector(item) {
+      const shapeId = "vector-shape-" + item.id;
+      const maskId = "plane-mask-" + item.id;
+      const svg = svgEl("svg");
+      svg.setAttribute("class", "plane-vector");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", item.name);
+      const defs = svgEl("defs");
+      const shape = svgEl("rect");
+      shape.setAttribute("id", shapeId);
+      shape.setAttribute("class", "vector-shape");
+      const mask = svgEl("mask");
+      mask.setAttribute("id", maskId);
+      mask.setAttribute("maskUnits", "userSpaceOnUse");
+      mask.setAttribute("maskContentUnits", "userSpaceOnUse");
+      const maskShape = svgEl("use");
+      maskShape.setAttribute("href", "#" + shapeId);
+      maskShape.setAttribute("fill", "#fff");
+      mask.appendChild(maskShape);
+      defs.append(shape, mask);
+      const fill = svgEl("use");
+      fill.setAttribute("class", "vector-fill");
+      fill.setAttribute("href", "#" + shapeId);
+      fill.setAttribute("fill", "#f7f4ee");
+      const image = svgEl("image");
+      image.setAttribute("href", item.url);
+      image.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      image.setAttribute("mask", "url(#" + maskId + ")");
+      const overlay = svgEl("use");
+      overlay.setAttribute("class", "blue-overlay");
+      overlay.setAttribute("href", "#" + shapeId);
+      overlay.setAttribute("fill", "#00A5E9");
+      const stroke = svgEl("use");
+      stroke.setAttribute("class", "inner-stroke");
+      stroke.setAttribute("href", "#" + shapeId);
+      stroke.setAttribute("fill", "none");
+      stroke.setAttribute("stroke", "url(#inner-stroke-gradient)");
+      stroke.setAttribute("stroke-width", "2");
+      stroke.setAttribute("mask", "url(#" + maskId + ")");
+      svg.append(defs, fill, image, overlay, stroke);
+      return svg;
+    }
+
+    function planeSize(item) {
+      const limits = stageLimit();
+      const ratio = item.width && item.height ? item.width / item.height : 4 / 3;
+      let width = limits.maxW;
+      let height = width / ratio;
+      if (height > limits.maxH) {
+        height = limits.maxH;
+        width = height * ratio;
+      }
+      return { width: Math.round(width), height: Math.round(height) };
+    }
+
+    function fitCard() {
+      const planes = [...preview.querySelectorAll(".plane")];
+      card.classList.toggle("has-images", planes.length > 0);
+      if (!planes.length) {
+        card.style.width = "";
+        card.style.height = "";
+        return;
+      }
+      let width = 0;
+      let height = 0;
+      for (const plane of planes) {
+        width = Math.max(width, plane.offsetWidth);
+        height = Math.max(height, plane.offsetHeight);
+      }
+      card.style.width = width + "px";
+      card.style.height = height + "px";
+    }
+
+    function layoutPlanes() {
+      const planes = [...preview.querySelectorAll(".plane")];
+      const count = planes.length;
+      for (let index = 0; index < count; index++) {
+        const y = (index - (count - 1) / 2) * yDistance;
+        const plane = planes[index];
+        plane.dataset.x = "0";
+        plane.dataset.y = String(y);
+        plane.dataset.z = "0";
+        plane.style.transform = "translate(-50%, -50%) translate3d(0px, " + y + "px, 0px) " + rotationTransform();
+      }
+    }
+
+    function paintDistance() {
+      const fill = ((yDistance - Y_DISTANCE_MIN) / (Y_DISTANCE_MAX - Y_DISTANCE_MIN)) * 100;
+      yDistanceSlider.style.setProperty("--fill", fill + "%");
+      yDistanceValue.textContent = yDistance + "px";
+      valueDistance.textContent = String(yDistance);
+    }
+
+    function applyDistance(value) {
+      const next = Number.parseInt(value, 10);
+      if (!Number.isInteger(next)) return;
+      yDistance = Math.min(Y_DISTANCE_MAX, Math.max(Y_DISTANCE_MIN, next));
+      yDistanceSlider.value = String(yDistance);
+      paintDistance();
+      layoutPlanes();
+    }
+
+    function syncImageCount() {
+      imageCount.textContent = images.length + "/10 images";
+      const full = images.length >= MAX_IMAGES;
+      fileInput.disabled = full;
+      uploadLabel.classList.toggle("is-disabled", full);
+      uploadLabel.setAttribute("aria-disabled", full ? "true" : "false");
+      addExamplesButton.disabled = full;
+      exportButton.disabled = images.length === 0;
+    }
+
+    function renderPreview() {
+      preview.replaceChildren();
+      const visible = images.filter(function (item) { return item.visible; });
+      placeholder.hidden = images.length > 0;
+      for (const item of visible) {
+        const size = planeSize(item);
+        const plane = document.createElement("div");
+        plane.className = "plane";
+        plane.dataset.id = item.id;
+        plane.style.width = size.width + "px";
+        plane.style.height = size.height + "px";
+        plane.appendChild(buildPlaneVector(item));
+        layoutVector(plane, size.width, size.height);
+        preview.appendChild(plane);
+      }
+      layoutPlanes();
+      fitCard();
+      applyAdjust();
+    }
+
+    function removeImage(id) {
+      const index = images.findIndex(function (item) { return item.id === id; });
+      if (index === -1) return;
+      URL.revokeObjectURL(images[index].url);
+      images.splice(index, 1);
+      imageNote.textContent = "";
+      renderList();
+      renderPreview();
+      syncImageCount();
+    }
+
+    function startReorder(event, row) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const id = row.dataset.id;
+      const fromIndex = images.findIndex(function (item) { return item.id === id; });
+      if (fromIndex === -1) return;
+      const handle = event.currentTarget;
+      const originX = event.clientX;
+      const originY = event.clientY;
+      const rowRect = row.getBoundingClientRect();
+      let dragging = false;
+      let gap = null;
+
+      try { handle.setPointerCapture(event.pointerId); } catch (error) {}
+
+      function placeGapAt(index) {
+        const others = [...imageList.querySelectorAll(".image-row")].filter(function (el) { return el !== row; });
+        const slots = imageList.querySelector(".image-slot");
+        if (index >= others.length) {
+          if (slots) imageList.insertBefore(gap, slots);
+          else imageList.appendChild(gap);
+        } else imageList.insertBefore(gap, others[index]);
+      }
+
+      function moveGap(clientY) {
+        const listRect = imageList.getBoundingClientRect();
+        const gapPx = parseFloat(getComputedStyle(imageList).rowGap) || 0;
+        const stride = rowRect.height + gapPx;
+        let index = Math.floor((clientY - listRect.top) / stride);
+        const max = images.length - 1;
+        if (index < 0) index = 0;
+        if (index > max) index = max;
+        placeGapAt(index);
+      }
+
+      function clearDrag() {
+        row.classList.remove("is-dragging");
+        row.style.position = "";
+        row.style.left = "";
+        row.style.width = "";
+        row.style.top = "";
+        row.style.zIndex = "";
+        if (gap && gap.parentNode) gap.remove();
+        gap = null;
+      }
+
+      function onMove(moveEvent) {
+        if (!dragging) {
+          if (Math.abs(moveEvent.clientY - originY) < 3 && Math.abs(moveEvent.clientX - originX) < 3) return;
+          dragging = true;
+          gap = document.createElement("li");
+          gap.className = "image-gap";
+          gap.setAttribute("aria-hidden", "true");
+          gap.style.height = rowRect.height + "px";
+          placeGapAt(fromIndex);
+          row.classList.add("is-dragging");
+          row.style.position = "fixed";
+          row.style.left = rowRect.left + "px";
+          row.style.width = rowRect.width + "px";
+          row.style.zIndex = "5";
+        }
+        row.style.top = (rowRect.top + moveEvent.clientY - originY) + "px";
+        const listRect = imageList.getBoundingClientRect();
+        const inside = moveEvent.clientX >= listRect.left && moveEvent.clientX <= listRect.right && moveEvent.clientY >= listRect.top && moveEvent.clientY <= listRect.bottom;
+        if (inside) moveGap(moveEvent.clientY);
+        else placeGapAt(fromIndex);
+      }
+
+      function onUp(upEvent) {
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        if (!dragging) return;
+        const listRect = imageList.getBoundingClientRect();
+        const inside = upEvent.clientX >= listRect.left && upEvent.clientX <= listRect.right && upEvent.clientY >= listRect.top && upEvent.clientY <= listRect.bottom;
+        let nextIndex = fromIndex;
+        if (inside) {
+          moveGap(upEvent.clientY);
+          nextIndex = [...imageList.children].filter(function (el) {
+            return el !== row && !el.classList.contains("image-slot");
+          }).indexOf(gap);
+        }
+        clearDrag();
+        if (!inside || nextIndex < 0 || nextIndex === fromIndex) {
+          renderList();
+          return;
+        }
+        const item = images.splice(fromIndex, 1)[0];
+        images.splice(nextIndex, 0, item);
+        renderList();
+        renderPreview();
+      }
+
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    }
+
+    function renderList() {
+      imageList.replaceChildren();
+      for (const item of images) {
+        const row = document.createElement("li");
+        row.className = "image-row";
+        row.dataset.id = item.id;
+
+        const handle = document.createElement("button");
+        handle.type = "button";
+        handle.className = "handle";
+        handle.setAttribute("aria-label", "Reorder " + item.name);
+        handle.innerHTML = GRIP_ICON;
+        handle.addEventListener("pointerdown", function (pointerEvent) {
+          startReorder(pointerEvent, row);
+        });
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = item.visible;
+        checkbox.setAttribute("aria-label", "Show " + item.name);
+        checkbox.addEventListener("change", function () {
+          item.visible = checkbox.checked;
+          renderPreview();
+        });
+
+        const name = document.createElement("span");
+        name.className = "image-name";
+        name.textContent = item.name;
+
+        const bin = document.createElement("button");
+        bin.type = "button";
+        bin.className = "bin";
+        bin.setAttribute("aria-label", "Remove " + item.name);
+        bin.innerHTML = BIN_ICON;
+        bin.addEventListener("click", function () {
+          removeImage(item.id);
+        });
+
+        row.append(handle, checkbox, name, bin);
+        imageList.appendChild(row);
+      }
+      for (let index = images.length; index < MAX_IMAGES; index += 1) {
+        const slot = document.createElement("li");
+        slot.className = "image-slot";
+        slot.setAttribute("aria-hidden", "true");
+        imageList.appendChild(slot);
+      }
+    }
+
+    function trackImage(name, url, file) {
+      const item = {
+        id: String(nextImageId),
+        name: name,
+        url: url,
+        visible: true,
+        width: 0,
+        height: 0,
+        dataUrl: url.indexOf("data:") === 0 ? url : ""
+      };
+      nextImageId += 1;
+      images.push(item);
+      if (file) item.encoded = encodeBlob(file);
+      else if (url.indexOf("data:") !== 0) item.encoded = fetch(url).then(function (response) { return response.blob(); }).then(encodeBlob).catch(function () { return ""; });
+      const probe = new Image();
+      probe.onload = function () {
+        item.width = probe.naturalWidth;
+        item.height = probe.naturalHeight;
+        const plane = preview.querySelector('.plane[data-id="' + item.id + '"]');
+        if (plane) {
+          const size = planeSize(item);
+          plane.style.width = size.width + "px";
+          plane.style.height = size.height + "px";
+          layoutVector(plane, size.width, size.height);
+        }
+        fitCard();
+      };
+      probe.onerror = function () {
+        imageNote.textContent = "This image could not be shown.";
+      };
+      probe.src = item.url;
+      return item;
+    }
+
+    function addFiles(fileList) {
+      const files = Array.from(fileList || []);
+      if (!files.length) return;
+      const imagesOnly = [];
+      let skippedType = false;
+      for (const file of files) {
+        if (file.type.startsWith("image/")) imagesOnly.push(file);
+        else skippedType = true;
+      }
+      const room = MAX_IMAGES - images.length;
+      const accepted = imagesOnly.slice(0, Math.max(0, room));
+      if (!accepted.length) {
+        imageNote.textContent = imagesOnly.length ? "10 images is the limit." : "Choose an image file.";
+        return;
+      }
+      if (imagesOnly.length > room) imageNote.textContent = "10 images is the limit.";
+      else if (skippedType) imageNote.textContent = "Choose an image file.";
+      else imageNote.textContent = "";
+      for (const file of accepted) trackImage(file.name, URL.createObjectURL(file), file);
+      renderList();
+      renderPreview();
+      syncImageCount();
+    }
+
+    const EXAMPLES = [
+      { name: "Developer Suite.png", file: "examples/developer-suite.png" },
+      { name: "Data Suite.png", file: "examples/data-suite.png" },
+      { name: "Digital Space Twin.png", file: "examples/digital-space-twin.png" },
+      { name: "Global Sensor Network.png", file: "examples/global-sensor-network.png" },
+      { name: "Digital Space Twin 2.png", file: "examples/digital-space-twin-2.png" },
+      { name: "Marketplace Orders.png", file: "examples/marketplace-orders.png" },
+      { name: "Slingshot Marketplace.png", file: "examples/slingshot-marketplace.png" },
+      { name: "Slingshot Portal.png", file: "examples/slingshot-portal.png" },
+      { name: "Anomaly Analytics.png", file: "examples/anomaly-analytics.png" },
+      { name: "Slingshot Portal 2.png", file: "examples/slingshot-portal-2.png" }
+    ];
+
+    let exampleSourcesPromise = null;
+
+    function loadExampleSources() {
+      if (window.EXAMPLE_SOURCES) return Promise.resolve(window.EXAMPLE_SOURCES);
+      if (exampleSourcesPromise) return exampleSourcesPromise;
+      exampleSourcesPromise = new Promise(function (resolve) {
+        const script = document.createElement("script");
+        script.src = "examples/sources.js";
+        script.onload = function () { resolve(window.EXAMPLE_SOURCES || {}); };
+        script.onerror = function () { resolve({}); };
+        document.head.appendChild(script);
+      });
+      return exampleSourcesPromise;
+    }
+
+    async function addExampleImages() {
+      const room = MAX_IMAGES - images.length;
+      if (room <= 0) {
+        imageNote.textContent = "10 images is the limit.";
+        return;
+      }
+      const portalExample = EXAMPLES.find(function (example) {
+        return example.name === "Slingshot Portal.png";
+      });
+      const others = EXAMPLES.filter(function (example) {
+        return example !== portalExample;
+      });
+      imageNote.textContent = EXAMPLES.length > room ? "10 images is the limit." : "";
+      const sources = await loadExampleSources();
+      const portal = trackImage(portalExample.name, sources[portalExample.file] || portalExample.file);
+      images.splice(images.indexOf(portal), 1);
+      images.unshift(portal);
+      const acceptedOthers = others.slice(0, room - 1);
+      for (const example of acceptedOthers) trackImage(example.name, sources[example.file] || example.file);
+      renderList();
+      renderPreview();
+      syncImageCount();
+    }
+
+    for (const axis of ["x", "y", "z"]) {
+      const slider = document.getElementById("slider-" + axis);
+      const field = document.getElementById("field-" + axis);
+      slider.addEventListener("input", function () {
+        commit(axis, slider.value, "slider");
+      });
+      field.addEventListener("input", function () {
+        const raw = field.value.trim();
+        if (!/^-?\d+$/.test(raw)) return;
+        commit(axis, raw, "field");
+      });
+      field.addEventListener("blur", function () {
+        field.value = String(rotationFor(axis));
+      });
+      field.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") field.blur();
+      });
+      paintSlider(axis, slider);
+    }
+
+    for (const adjust of ["saturation", "hue", "contrast", "brightness"]) {
+      const slider = document.getElementById("slider-" + adjust);
+      slider.addEventListener("input", function () {
+        setAdjust(adjust, slider.value);
+      });
+    }
+
+    for (const glow of ["blur", "spread", "opacity"]) {
+      const slider = document.getElementById("slider-" + glow);
+      slider.addEventListener("input", function () {
+        setGlow(glow, slider.value);
+      });
+    }
+
+    document.getElementById("outer-glow").addEventListener("change", function () {
+      outerGlow = document.getElementById("outer-glow").checked;
+      applyAdjust();
+    });
+
+    document.getElementById("blue-overlay").addEventListener("change", function () {
+      blueOverlay = document.getElementById("blue-overlay").checked;
+      applyAdjust();
+    });
+
+    document.getElementById("inner-stroke").addEventListener("change", function () {
+      innerStroke = document.getElementById("inner-stroke").checked;
+      applyAdjust();
+    });
+
+    document.getElementById("slider-blue-opacity").addEventListener("input", function () {
+      setBlueOpacity(document.getElementById("slider-blue-opacity").value);
+    });
+
+    applyRotation();
+    applyAdjust();
+
+    document.getElementById("controls").addEventListener("submit", function (event) {
+      event.preventDefault();
+    });
+
+    document.getElementById("reset").addEventListener("click", function () {
+      commit("x", 0, "reset");
+      commit("y", 0, "reset");
+      commit("z", 0, "reset");
+    });
+
+    fileInput.addEventListener("change", function () {
+      addFiles(fileInput.files);
+      fileInput.value = "";
+    });
+
+    addExamplesButton.addEventListener("click", addExampleImages);
+
+    sortButton.addEventListener("click", function () {
+      images.reverse();
+      listReversed = !listReversed;
+      sortButton.setAttribute("aria-pressed", listReversed ? "true" : "false");
+      renderList();
+      renderPreview();
+    });
+
+    renderList();
+    syncImageCount();
+
+    let dragDepth = 0;
+    viewport.addEventListener("dragenter", function (event) {
+      event.preventDefault();
+      dragDepth += 1;
+      viewport.classList.add("is-dragover");
+    });
+    viewport.addEventListener("dragover", function (event) {
+      event.preventDefault();
+    });
+    viewport.addEventListener("dragleave", function () {
+      dragDepth -= 1;
+      if (dragDepth <= 0) {
+        dragDepth = 0;
+        viewport.classList.remove("is-dragover");
+      }
+    });
+    viewport.addEventListener("drop", function (event) {
+      event.preventDefault();
+      dragDepth = 0;
+      viewport.classList.remove("is-dragover");
+      addFiles(event.dataTransfer.files);
+    });
+
+    document.getElementById("panel-images").addEventListener("dragover", function (event) {
+      event.preventDefault();
+    });
+    document.getElementById("panel-images").addEventListener("drop", function (event) {
+      event.preventDefault();
+      addFiles(event.dataTransfer.files);
+    });
+
+    document.addEventListener("dragover", function (event) {
+      event.preventDefault();
+    });
+    document.addEventListener("drop", function (event) {
+      event.preventDefault();
+    });
+
+    function resizePlanes() {
+      for (const plane of preview.querySelectorAll(".plane")) {
+        const item = images.find(function (entry) { return entry.id === plane.dataset.id; });
+        if (!item) continue;
+        const size = planeSize(item);
+        plane.style.width = size.width + "px";
+        plane.style.height = size.height + "px";
+        layoutVector(plane, size.width, size.height);
+      }
+      fitCard();
+    }
+
+    window.addEventListener("resize", resizePlanes);
+
+    yDistanceSlider.addEventListener("input", function () {
+      applyDistance(yDistanceSlider.value);
+    });
+    paintDistance();
+
+    const STORAGE_KEY = "image-axis-rotation-positions";
+    const DEFAULT_POSITION = { name: "Default", x: 62, y: -28, z: 14, distance: 40 };
+    const positionName = document.getElementById("position-name");
+    const savePositionButton = document.getElementById("save-position");
+    const savedPositions = document.getElementById("saved-positions");
+    let positions = [];
+
+    function isStoredInt(value) {
+      return Number.isInteger(value) && value >= MIN_DEG && value <= MAX_DEG;
+    }
+
+    function storedDistance(value) {
+      return Number.isInteger(value) && value >= Y_DISTANCE_MIN && value <= Y_DISTANCE_MAX;
+    }
+
+    function loadPositions() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if (!Array.isArray(raw)) return [];
+        let addedDistance = false;
+        const loaded = raw.filter(function (item) {
+          return item &&
+            typeof item.name === "string" &&
+            item.name.trim() &&
+            item.name !== DEFAULT_POSITION.name &&
+            isStoredInt(item.x) &&
+            isStoredInt(item.y) &&
+            isStoredInt(item.z);
+        }).map(function (item) {
+          const distance = storedDistance(item.distance) ? item.distance : 40;
+          if (item.distance !== distance) addedDistance = true;
+          return { name: item.name, x: item.x, y: item.y, z: item.z, distance: distance };
+        });
+        if (addedDistance) {
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)); } catch (error) {}
+        }
+        return loaded;
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function persistPositions() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(positions));
+    }
+
+    function renderPositions(selectedName) {
+      const current = selectedName === undefined ? savedPositions.value : selectedName;
+      const choices = [DEFAULT_POSITION].concat(positions);
+      savedPositions.replaceChildren();
+      for (const position of choices) {
+        const option = document.createElement("option");
+        option.value = position.name;
+        option.textContent = position.name;
+        savedPositions.appendChild(option);
+      }
+      savedPositions.value = choices.some(function (position) { return position.name === current; }) ? current : DEFAULT_POSITION.name;
+    }
+
+    function nameIsTaken(name) {
+      if (name === DEFAULT_POSITION.name) return true;
+      return positions.some(function (position) { return position.name === name; });
+    }
+
+    function syncSaveButton() {
+      const name = positionName.value.trim();
+      savePositionButton.disabled = name === "" || nameIsTaken(name);
+    }
+
+    function saveCurrentPosition() {
+      const name = positionName.value.trim();
+      if (!name || nameIsTaken(name)) return;
+      positions.push({ name: name, x: rotationX, y: rotationY, z: rotationZ, distance: yDistance });
+      try {
+        persistPositions();
+      } catch (error) {
+        status.textContent = "This position could not be saved in this browser.";
+        return;
+      }
+      status.textContent = "";
+      renderPositions(name);
+      syncSaveButton();
+    }
+
+    positionName.addEventListener("input", syncSaveButton);
+    positionName.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        saveCurrentPosition();
+      }
+    });
+    savePositionButton.addEventListener("click", saveCurrentPosition);
+    savedPositions.addEventListener("change", function () {
+      const position = savedPositions.value === DEFAULT_POSITION.name
+        ? DEFAULT_POSITION
+        : positions.find(function (item) { return item.name === savedPositions.value; });
+      if (!position) return;
+      commit("x", position.x, "saved");
+      commit("y", position.y, "saved");
+      commit("z", position.z, "saved");
+      applyDistance(position.distance);
+    });
+
+    positions = loadPositions();
+    renderPositions(DEFAULT_POSITION.name);
+    syncSaveButton();
+
+    const PRESET_KEY = "image-axis-rotation-presets";
+    const DEFAULT_PRESET = {
+      name: "Default",
+      saturation: 100,
+      hue: 0,
+      contrast: 100,
+      brightness: 100,
+      blueOpacity: 50,
+      blur: 40,
+      spread: 6,
+      opacity: 24
+    };
+    const presetName = document.getElementById("preset-name");
+    const savePresetButton = document.getElementById("save-preset");
+    const savedPresets = document.getElementById("saved-presets");
+    let presets = [];
+
+    function storedRange(value, min, max) {
+      return Number.isInteger(value) && value >= min && value <= max;
+    }
+
+    function loadPresets() {
+      try {
+        const raw = JSON.parse(localStorage.getItem(PRESET_KEY) || "[]");
+        if (!Array.isArray(raw)) return [];
+        return raw.filter(function (item) {
+          return item &&
+            typeof item.name === "string" &&
+            item.name.trim() &&
+            item.name !== DEFAULT_PRESET.name &&
+            storedRange(item.saturation, 0, 200) &&
+            storedRange(item.hue, -180, 180) &&
+            storedRange(item.contrast, 0, 200) &&
+            storedRange(item.brightness, 0, 200) &&
+            storedRange(item.blueOpacity, 0, 100) &&
+            storedRange(item.blur, 0, 80) &&
+            storedRange(item.spread, 0, 40) &&
+            storedRange(item.opacity, 0, 100);
+        }).map(function (item) {
+          return {
+            name: item.name,
+            saturation: item.saturation,
+            hue: item.hue,
+            contrast: item.contrast,
+            brightness: item.brightness,
+            blueOpacity: item.blueOpacity,
+            blur: item.blur,
+            spread: item.spread,
+            opacity: item.opacity
+          };
+        });
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function renderPresets(selectedName) {
+      const current = selectedName === undefined ? savedPresets.value : selectedName;
+      const choices = [DEFAULT_PRESET].concat(presets);
+      savedPresets.replaceChildren();
+      for (const preset of choices) {
+        const option = document.createElement("option");
+        option.value = preset.name;
+        option.textContent = preset.name;
+        savedPresets.appendChild(option);
+      }
+      savedPresets.value = choices.some(function (preset) { return preset.name === current; }) ? current : DEFAULT_PRESET.name;
+    }
+
+    function presetNameIsTaken(name) {
+      if (name === DEFAULT_PRESET.name) return true;
+      return presets.some(function (preset) { return preset.name === name; });
+    }
+
+    function syncPresetButton() {
+      const name = presetName.value.trim();
+      savePresetButton.disabled = name === "" || presetNameIsTaken(name);
+    }
+
+    function currentPreset(name) {
+      return {
+        name: name,
+        saturation: saturation,
+        hue: hue,
+        contrast: contrast,
+        brightness: brightness,
+        blueOpacity: blueOpacity,
+        blur: glowBlur,
+        spread: glowSpread,
+        opacity: glowOpacity
+      };
+    }
+
+    function applyPreset(preset) {
+      setAdjust("saturation", preset.saturation);
+      setAdjust("hue", preset.hue);
+      setAdjust("contrast", preset.contrast);
+      setAdjust("brightness", preset.brightness);
+      setBlueOpacity(preset.blueOpacity);
+      setGlow("blur", preset.blur);
+      setGlow("spread", preset.spread);
+      setGlow("opacity", preset.opacity);
+    }
+
+    function saveCurrentPreset() {
+      const name = presetName.value.trim();
+      if (!name || presetNameIsTaken(name)) return;
+      presets.push(currentPreset(name));
+      try {
+        localStorage.setItem(PRESET_KEY, JSON.stringify(presets));
+      } catch (error) {
+        presets.pop();
+        return;
+      }
+      renderPresets(name);
+      syncPresetButton();
+    }
+
+    presetName.addEventListener("input", syncPresetButton);
+    presetName.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        saveCurrentPreset();
+      }
+    });
+    savePresetButton.addEventListener("click", saveCurrentPreset);
+    savedPresets.addEventListener("change", function () {
+      const preset = savedPresets.value === DEFAULT_PRESET.name
+        ? DEFAULT_PRESET
+        : presets.find(function (item) { return item.name === savedPresets.value; });
+      if (!preset) return;
+      applyPreset(preset);
+    });
+
+    presets = loadPresets();
+    renderPresets(DEFAULT_PRESET.name);
+    syncPresetButton();
+
+    const adjustmentsToggle = document.getElementById("adjustments-toggle");
+    const adjustmentsPanel = document.getElementById("adjustments-panel");
+    adjustmentsToggle.addEventListener("click", function () {
+      const open = adjustmentsToggle.getAttribute("aria-expanded") !== "true";
+      adjustmentsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      adjustmentsPanel.hidden = !open;
+    });
+
+    const panelTabs = [
+      { button: document.getElementById("tab-images"), panel: document.getElementById("panel-images") },
+      { button: document.getElementById("tab-axes"), panel: document.getElementById("panel-axes") },
+      { button: document.getElementById("tab-adjust"), panel: document.getElementById("panel-adjust") }
+    ];
+
+    function selectTab(id) {
+      for (const tab of panelTabs) {
+        const selected = tab.button.id === id;
+        tab.button.classList.toggle("is-selected", selected);
+        tab.button.setAttribute("aria-selected", selected ? "true" : "false");
+        tab.button.tabIndex = selected ? 0 : -1;
+        tab.panel.hidden = !selected;
+      }
+    }
+
+    for (const tab of panelTabs) {
+      tab.button.addEventListener("click", function () {
+        selectTab(tab.button.id);
+      });
+    }
+
+    let exportMode = "all";
+
+    function selectExportMode(mode) {
+      exportMode = mode;
+      const allButton = document.getElementById("export-all");
+      const individualButton = document.getElementById("export-individual");
+      allButton.classList.toggle("is-selected", mode === "all");
+      individualButton.classList.toggle("is-selected", mode === "individual");
+      allButton.setAttribute("aria-pressed", mode === "all" ? "true" : "false");
+      individualButton.setAttribute("aria-pressed", mode === "individual" ? "true" : "false");
+    }
+
+    document.getElementById("export-all").addEventListener("click", function () {
+      selectExportMode("all");
+    });
+    document.getElementById("export-individual").addEventListener("click", function () {
+      selectExportMode("individual");
+    });
+
+    function multiplyMatrix(a, b) {
+      const out = new Array(16).fill(0);
+      for (let column = 0; column < 4; column++) {
+        for (let row = 0; row < 4; row++) {
+          out[column * 4 + row] =
+            a[row] * b[column * 4] +
+            a[4 + row] * b[column * 4 + 1] +
+            a[8 + row] * b[column * 4 + 2] +
+            a[12 + row] * b[column * 4 + 3];
+        }
+      }
+      return out;
+    }
+
+    function imageMatrix() {
+      const rad = Math.PI / 180;
+      const x = rotationX * rad;
+      const y = rotationY * rad;
+      const z = rotationZ * rad;
+      const cx = Math.cos(x);
+      const sx = Math.sin(x);
+      const cy = Math.cos(y);
+      const sy = Math.sin(y);
+      const cz = Math.cos(z);
+      const sz = Math.sin(z);
+      const rx = [1, 0, 0, 0, 0, cx, sx, 0, 0, -sx, cx, 0, 0, 0, 0, 1];
+      const ry = [cy, 0, -sy, 0, 0, 1, 0, 0, sy, 0, cy, 0, 0, 0, 0, 1];
+      const rz = [cz, sz, 0, 0, -sz, cz, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+      return multiplyMatrix(rz, multiplyMatrix(ry, rx));
+    }
+
+    function rotatePoint(matrix, x, y, z) {
+      return {
+        x: matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
+        y: matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
+        z: matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]
+      };
+    }
+
+    function stackAnchor() {
+      return (STACK_ANCHOR_Y - SCENE_ORIGIN_Y) * viewport.clientHeight;
+    }
+
+    function projectLocal(matrix, x, y, offsetY) {
+      const rotated = rotatePoint(matrix, x, y, 0);
+      const w = 1 - rotated.z / SCENE_PERSPECTIVE;
+      const safe = Math.abs(w) < 0.05 ? (w < 0 ? -0.05 : 0.05) : w;
+      return {
+        x: rotated.x / safe,
+        y: (rotated.y + stackAnchor() + offsetY) / safe,
+        z: rotated.z
+      };
+    }
+
+    function paddedBounds(width, height, matrix, offsetY) {
+      const pad = glowPad();
+      const xs = [-width / 2 - pad, width / 2 + pad];
+      const ys = [-height / 2 - pad, height / 2 + pad];
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const y of ys) {
+        for (const x of xs) {
+          const point = projectLocal(matrix, x, y, offsetY);
+          minX = Math.min(minX, point.x);
+          minY = Math.min(minY, point.y);
+          maxX = Math.max(maxX, point.x);
+          maxY = Math.max(maxY, point.y);
+        }
+      }
+      return { minX: minX, minY: minY, maxX: maxX, maxY: maxY };
+    }
+
+    function loadExportImage(url) {
+      return new Promise(function (resolve, reject) {
+        const img = new Image();
+        img.onload = function () { resolve(img); };
+        img.onerror = function () { reject(new Error("This image could not be exported.")); };
+        img.src = url;
+      });
+    }
+
+    function traceRoundRect(ctx, x, y, width, height, radius) {
+      const limit = Math.min(Math.abs(width), Math.abs(height)) / 2;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, Math.max(0, Math.min(radius, limit)));
+    }
+
+    function paintPlaneBitmap(img, width, height) {
+      const pad = glowPad();
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.ceil(width + pad * 2));
+      canvas.height = Math.max(1, Math.ceil(height + pad * 2));
+      const ctx = canvas.getContext("2d");
+      ctx.translate(pad + width / 2, pad + height / 2);
+      if (outerGlow && glowOpacity > 0) {
+        const shift = 100000;
+        for (const blur of glowLayers()) {
+          ctx.save();
+          ctx.shadowColor = glowColor();
+          ctx.shadowBlur = blur;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = shift;
+          ctx.fillStyle = "#000";
+          traceRoundRect(ctx, -width / 2 - glowSpread, -height / 2 - glowSpread - shift, width + glowSpread * 2, height + glowSpread * 2, PLANE_RADIUS + glowSpread);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      const left = -width / 2;
+      const top = -height / 2;
+      ctx.save();
+      traceRoundRect(ctx, left, top, width, height, PLANE_RADIUS);
+      ctx.clip();
+      ctx.fillStyle = "#f7f4ee";
+      ctx.fillRect(left, top, width, height);
+      ctx.filter = imageFilter();
+      ctx.drawImage(img, left, top, width, height);
+      ctx.filter = "none";
+      if (blueOverlay && blueOpacity > 0) {
+        ctx.globalCompositeOperation = "multiply";
+        ctx.globalAlpha = blueOpacity / 100;
+        ctx.fillStyle = "#00A5E9";
+        ctx.fillRect(left, top, width, height);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+      if (innerStroke) {
+        ctx.save();
+        traceRoundRect(ctx, left, top, width, height, PLANE_RADIUS);
+        ctx.clip();
+        const gradient = ctx.createLinearGradient(left, top + height, left + width, top);
+        gradient.addColorStop(0, "#56739C");
+        gradient.addColorStop(0.5, "#1B1D22");
+        gradient.addColorStop(1, "#56739C");
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = gradient;
+        traceRoundRect(ctx, left, top, width, height, PLANE_RADIUS);
+        ctx.stroke();
+        ctx.restore();
+      }
+      return { canvas: canvas, pad: pad, width: width, height: height };
+    }
+
+    function exportShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      return shader;
+    }
+
+    function composePlanes(entries, matrix, format) {
+      const painted = [];
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      entries.forEach(function (entry, index) {
+        const bitmap = paintPlaneBitmap(entry.img, entry.width, entry.height);
+        const bounds = paddedBounds(entry.width, entry.height, matrix, entry.offsetY);
+        minX = Math.min(minX, bounds.minX);
+        minY = Math.min(minY, bounds.minY);
+        maxX = Math.max(maxX, bounds.maxX);
+        maxY = Math.max(maxY, bounds.maxY);
+        painted.push({ entry: entry, bitmap: bitmap, index: index, z: projectLocal(matrix, 0, 0, entry.offsetY).z });
+      });
+      const width = Math.max(1, Math.ceil(maxX - minX));
+      const height = Math.max(1, Math.ceil(maxY - minY));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, preserveDrawingBuffer: true, antialias: true });
+      const program = gl.createProgram();
+      gl.attachShader(program, exportShader(gl, gl.VERTEX_SHADER, "attribute vec4 aClip;attribute vec2 aUv;varying vec2 vUv;void main(){gl_Position=aClip;vUv=aUv;}"));
+      gl.attachShader(program, exportShader(gl, gl.FRAGMENT_SHADER, "precision mediump float;varying vec2 vUv;uniform sampler2D uTex;void main(){gl_FragColor=texture2D(uTex,vUv);}"));
+      gl.linkProgram(program);
+      gl.useProgram(program);
+      gl.viewport(0, 0, width, height);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      const clear = format === "jpg" ? 1 : 0;
+      gl.clearColor(clear, clear, clear, clear);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      painted.sort(function (a, b) {
+        if (a.z !== b.z) return a.z - b.z;
+        return b.index - a.index;
+      });
+      const buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      const locClip = gl.getAttribLocation(program, "aClip");
+      const locUv = gl.getAttribLocation(program, "aUv");
+      gl.enableVertexAttribArray(locClip);
+      gl.enableVertexAttribArray(locUv);
+      gl.vertexAttribPointer(locClip, 4, gl.FLOAT, false, 24, 0);
+      gl.vertexAttribPointer(locUv, 2, gl.FLOAT, false, 24, 16);
+      for (const item of painted) {
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, item.bitmap.canvas);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        const halfW = item.entry.width / 2 + item.bitmap.pad;
+        const halfH = item.entry.height / 2 + item.bitmap.pad;
+        const corners = [[-halfW, -halfH, 0, 0], [halfW, -halfH, 1, 0], [halfW, halfH, 1, 1], [-halfW, halfH, 0, 1]];
+        const order = [0, 1, 2, 0, 2, 3];
+        const data = new Float32Array(24);
+        for (let i = 0; i < order.length; i++) {
+          const corner = corners[order[i]];
+          const projected = projectLocal(matrix, corner[0], corner[1], item.entry.offsetY);
+          const w = 1 - projected.z / SCENE_PERSPECTIVE;
+          const safe = Math.abs(w) < 0.05 ? (w < 0 ? -0.05 : 0.05) : w;
+          const ndcX = ((projected.x - minX) / width) * 2 - 1;
+          const ndcY = 1 - ((projected.y - minY) / height) * 2;
+          data[i * 4] = ndcX * safe;
+          data[i * 4 + 1] = ndcY * safe;
+          data[i * 4 + 2] = 0;
+          data[i * 4 + 3] = safe;
+        }
+        const interleaved = new Float32Array(36);
+        for (let i = 0; i < order.length; i++) {
+          const corner = corners[order[i]];
+          interleaved[i * 6] = data[i * 4];
+          interleaved[i * 6 + 1] = data[i * 4 + 1];
+          interleaved[i * 6 + 2] = data[i * 4 + 2];
+          interleaved[i * 6 + 3] = data[i * 4 + 3];
+          interleaved[i * 6 + 4] = corner[2];
+          interleaved[i * 6 + 5] = corner[3];
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, interleaved, gl.DYNAMIC_DRAW);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.deleteTexture(texture);
+      }
+      gl.deleteBuffer(buffer);
+      return canvas;
+    }
+
+    function canvasBlob(canvas, format) {
+      const type = format === "jpg" ? "image/jpeg" : "image/png";
+      return new Promise(function (resolve) {
+        canvas.toBlob(function (blob) { resolve(blob); }, type, 0.92);
+      });
+    }
+
+    function crc32(bytes) {
+      let crc = 0xffffffff;
+      for (let i = 0; i < bytes.length; i++) {
+        crc ^= bytes[i];
+        for (let bit = 0; bit < 8; bit++) {
+          crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+        }
+      }
+      return (~crc) >>> 0;
+    }
+
+    function zipFiles(files) {
+      const encoder = new TextEncoder();
+      const now = new Date();
+      const time = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+      const date = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+      const parts = [];
+      const central = [];
+      let offset = 0;
+      for (const file of files) {
+        const nameBytes = encoder.encode(file.name);
+        const crc = crc32(file.data);
+        const local = new DataView(new ArrayBuffer(30));
+        local.setUint32(0, 0x04034b50, true);
+        local.setUint16(4, 20, true);
+        local.setUint16(6, 0x0800, true);
+        local.setUint16(8, 0, true);
+        local.setUint16(10, time, true);
+        local.setUint16(12, date, true);
+        local.setUint32(14, crc, true);
+        local.setUint32(18, file.data.length, true);
+        local.setUint32(22, file.data.length, true);
+        local.setUint16(26, nameBytes.length, true);
+        local.setUint16(28, 0, true);
+        parts.push(new Uint8Array(local.buffer), nameBytes, file.data);
+        const header = new DataView(new ArrayBuffer(46));
+        header.setUint32(0, 0x02014b50, true);
+        header.setUint16(4, 20, true);
+        header.setUint16(6, 20, true);
+        header.setUint16(8, 0x0800, true);
+        header.setUint16(10, 0, true);
+        header.setUint16(12, time, true);
+        header.setUint16(14, date, true);
+        header.setUint32(16, crc, true);
+        header.setUint32(20, file.data.length, true);
+        header.setUint32(24, file.data.length, true);
+        header.setUint16(28, nameBytes.length, true);
+        header.setUint16(30, 0, true);
+        header.setUint16(32, 0, true);
+        header.setUint16(34, 0, true);
+        header.setUint16(36, 0, true);
+        header.setUint32(38, 0, true);
+        header.setUint32(42, offset, true);
+        central.push(new Uint8Array(header.buffer), nameBytes);
+        offset += 30 + nameBytes.length + file.data.length;
+      }
+      const centralSize = central.reduce(function (sum, part) { return sum + part.length; }, 0);
+      const end = new DataView(new ArrayBuffer(22));
+      end.setUint32(0, 0x06054b50, true);
+      end.setUint16(8, files.length, true);
+      end.setUint16(10, files.length, true);
+      end.setUint32(12, centralSize, true);
+      end.setUint32(16, offset, true);
+      return new Blob(parts.concat(central, [new Uint8Array(end.buffer)]), { type: "application/zip" });
+    }
+
+    const EXPORT_FOLDER = "Tech Stack Visualizer";
+
+    async function saveIndividualFiles(files) {
+      if (window.isSecureContext && typeof window.showDirectoryPicker === "function") {
+        try {
+          const root = await window.showDirectoryPicker({ mode: "readwrite" });
+          const folder = await root.getDirectoryHandle(EXPORT_FOLDER, { create: true });
+          for (const file of files) {
+            const handle = await folder.getFileHandle(file.name, { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(file.blob);
+            await writable.close();
+          }
+          return;
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+        }
+      }
+      const packed = [];
+      for (const file of files) {
+        packed.push({
+          name: EXPORT_FOLDER + "/" + file.name,
+          data: new Uint8Array(await file.blob.arrayBuffer())
+        });
+      }
+      downloadBlob(zipFiles(packed), EXPORT_FOLDER + ".zip");
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+    }
+
+    function exportStem(name, used) {
+      const stem = (name.replace(/\.[^.]+$/, "") || "image").replace(/[^\w.-]+/g, "-");
+      let candidate = stem || "image";
+      let n = 2;
+      while (used[candidate]) {
+        candidate = stem + "-" + n;
+        n += 1;
+      }
+      used[candidate] = true;
+      return candidate;
+    }
+
+    async function exportImages() {
+      if (!images.length || exportButton.disabled) return;
+      const format = exportFormat.value === "jpg" ? "jpg" : "png";
+      const extension = format === "jpg" ? ".jpg" : ".png";
+      const matrix = imageMatrix();
+      const count = images.length;
+      const loaded = [];
+      for (let index = 0; index < count; index++) {
+        const item = images[index];
+        const img = await loadExportImage(await imageSource(item));
+        const size = planeSize(item);
+        loaded.push({
+          item: item,
+          img: img,
+          width: size.width,
+          height: size.height,
+          offsetY: (index - (count - 1) / 2) * yDistance
+        });
+      }
+
+      if (exportMode === "individual") {
+        const used = {};
+        const files = [];
+        for (const entry of loaded) {
+          files.push({
+            name: exportStem(entry.item.name, used) + extension,
+            blob: await canvasBlob(composePlanes([entry], matrix, format), format)
+          });
+        }
+        await saveIndividualFiles(files);
+        return;
+      }
+
+      downloadBlob(await canvasBlob(composePlanes(loaded, matrix, format), format), "TechStack" + extension);
+    }
+
+    exportButton.addEventListener("click", function () {
+      exportImages().catch(function () {
+        imageNote.textContent = "This image could not be exported.";
+      });
+    });
+
+    function encodeBlob(blob) {
+      return new Promise(function (resolve) {
+        const reader = new FileReader();
+        reader.onload = function () {
+          resolve(typeof reader.result === "string" ? reader.result : "");
+        };
+        reader.onerror = function () { resolve(""); };
+        reader.readAsDataURL(blob);
+      }).then(function (value) {
+        return value;
+      });
+    }
+
+    function bytesToBase64Url(bytes) {
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    }
+
+    function base64UrlToBytes(text) {
+      const padded = text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4);
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    }
+
+    function writeBits(bits, value, width) {
+      for (let shift = width - 1; shift >= 0; shift -= 1) bits.push((value >>> shift) & 1);
+    }
+
+    function finishBits(bits) {
+      const bytes = [];
+      let current = 0;
+      for (let index = 0; index < bits.length; index += 1) {
+        current = (current << 1) | bits[index];
+        if ((index + 1) % 8 === 0) {
+          bytes.push(current);
+          current = 0;
+        }
+      }
+      if (bits.length % 8) bytes.push(current << (8 - (bits.length % 8)));
+      return new Uint8Array(bytes);
+    }
+
+    function readBits(cursor, width) {
+      let value = 0;
+      for (let index = 0; index < width; index += 1) {
+        const at = cursor.at + index;
+        const byte = cursor.bytes[at >> 3] || 0;
+        value = (value << 1) | ((byte >> (7 - (at & 7))) & 1);
+      }
+      cursor.at += width;
+      return value;
+    }
+
+    function sharedExampleIndex(item) {
+      return EXAMPLES.findIndex(function (example) { return example.name === item.name; });
+    }
+
+    function encodeCompactShare() {
+      const bits = [];
+      writeBits(bits, Math.max(0, Math.min(360, rotationX + 180)), 9);
+      writeBits(bits, Math.max(0, Math.min(360, rotationY + 180)), 9);
+      writeBits(bits, Math.max(0, Math.min(360, rotationZ + 180)), 9);
+      writeBits(bits, Math.max(0, Math.min(400, yDistance)), 9);
+      writeBits(bits, Math.max(0, Math.min(200, saturation)), 8);
+      writeBits(bits, Math.max(0, Math.min(360, hue + 180)), 9);
+      writeBits(bits, Math.max(0, Math.min(200, contrast)), 8);
+      writeBits(bits, Math.max(0, Math.min(200, brightness)), 8);
+      writeBits(bits, Math.max(0, Math.min(100, blueOpacity)), 7);
+      writeBits(bits, Math.max(0, Math.min(80, glowBlur)), 7);
+      writeBits(bits, Math.max(0, Math.min(40, glowSpread)), 6);
+      writeBits(bits, Math.max(0, Math.min(100, glowOpacity)), 7);
+      writeBits(bits, blueOverlay ? 1 : 0, 1);
+      writeBits(bits, outerGlow ? 1 : 0, 1);
+      writeBits(bits, innerStroke ? 1 : 0, 1);
+      const sharedImages = [];
+      for (const item of images) {
+        const index = sharedExampleIndex(item);
+        if (index >= 0) sharedImages.push({ index: index, visible: item.visible !== false });
+      }
+      writeBits(bits, Math.min(MAX_IMAGES, sharedImages.length), 4);
+      for (const image of sharedImages.slice(0, MAX_IMAGES)) {
+        writeBits(bits, image.index, 4);
+        writeBits(bits, image.visible ? 1 : 0, 1);
+      }
+      return "s." + bytesToBase64Url(finishBits(bits));
+    }
+
+    function decodeCompactShare(text) {
+      try {
+        const cursor = { bytes: base64UrlToBytes(text), at: 0 };
+        const countStart = 9 + 9 + 9 + 9 + 8 + 9 + 8 + 8 + 7 + 7 + 6 + 7 + 1 + 1 + 1;
+        if (cursor.bytes.length * 8 < countStart + 4) return null;
+        const state = {
+          v: 1,
+          x: readBits(cursor, 9) - 180,
+          y: readBits(cursor, 9) - 180,
+          z: readBits(cursor, 9) - 180,
+          distance: readBits(cursor, 9),
+          saturation: readBits(cursor, 8),
+          hue: readBits(cursor, 9) - 180,
+          contrast: readBits(cursor, 8),
+          brightness: readBits(cursor, 8),
+          blueOpacity: readBits(cursor, 7),
+          blur: readBits(cursor, 7),
+          spread: readBits(cursor, 6),
+          opacity: readBits(cursor, 7),
+          blueOverlay: readBits(cursor, 1) === 1,
+          outerGlow: readBits(cursor, 1) === 1,
+          innerStroke: readBits(cursor, 1) === 1,
+          images: []
+        };
+        const count = Math.min(MAX_IMAGES, readBits(cursor, 4));
+        for (let index = 0; index < count; index += 1) {
+          const example = EXAMPLES[readBits(cursor, 4)];
+          const visible = readBits(cursor, 1) === 1;
+          if (example) state.images.push({ name: example.name, visible: visible, src: example.file });
+        }
+        return state;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    async function decodeShare(hash) {
+      try {
+        if (hash.indexOf("s.") === 0) return decodeCompactShare(hash.slice(2));
+        const zipped = hash.indexOf("v1z.") === 0;
+        const plain = hash.indexOf("v1.") === 0;
+        if (!zipped && !plain) return null;
+        const bytes = base64UrlToBytes(hash.slice(zipped ? 4 : 3));
+        let json = bytes;
+        if (zipped) {
+          const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+          json = new Uint8Array(await new Response(stream).arrayBuffer());
+        }
+        const state = JSON.parse(new TextDecoder().decode(json));
+        if (!state || state.v !== 1) return null;
+        return state;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function copyText(text) {
+      function fallback() {
+        const field = document.createElement("textarea");
+        field.value = text;
+        field.setAttribute("readonly", "");
+        field.style.position = "fixed";
+        field.style.top = "0";
+        field.style.left = "0";
+        field.style.opacity = "0";
+        document.body.appendChild(field);
+        field.focus();
+        field.select();
+        let copied = false;
+        try { copied = document.execCommand("copy"); } catch (error) { copied = false; }
+        field.remove();
+        if (!copied) throw new Error("copy failed");
+      }
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        return navigator.clipboard.writeText(text).catch(fallback);
+      }
+      return Promise.resolve().then(fallback);
+    }
+
+    let sharePopupTimer = 0;
+    function showSharePopup() {
+      const popup = document.getElementById("share-popup");
+      popup.hidden = false;
+      clearTimeout(sharePopupTimer);
+      sharePopupTimer = setTimeout(function () { popup.hidden = true; }, 2000);
+    }
+
+    async function imageSource(item) {
+      if (item.dataUrl) return item.dataUrl;
+      if (item.url.indexOf("examples/") === 0) {
+        const sources = await loadExampleSources();
+        if (sources[item.url]) {
+          item.dataUrl = sources[item.url];
+          return item.dataUrl;
+        }
+      }
+      if (item.encoded) {
+        const encoded = await item.encoded;
+        if (encoded) {
+          item.dataUrl = encoded;
+          return encoded;
+        }
+      }
+      return item.url;
+    }
+
+    function applySharedAdjust(state) {
+      if (typeof state.blueOverlay === "boolean") {
+        blueOverlay = state.blueOverlay;
+        document.getElementById("blue-overlay").checked = blueOverlay;
+      }
+      if (typeof state.outerGlow === "boolean") {
+        outerGlow = state.outerGlow;
+        document.getElementById("outer-glow").checked = outerGlow;
+      }
+      if (typeof state.innerStroke === "boolean") {
+        innerStroke = state.innerStroke;
+        document.getElementById("inner-stroke").checked = innerStroke;
+      }
+      if (storedRange(state.saturation, 0, 200)) setAdjust("saturation", state.saturation);
+      if (storedRange(state.hue, -180, 180)) setAdjust("hue", state.hue);
+      if (storedRange(state.contrast, 0, 200)) setAdjust("contrast", state.contrast);
+      if (storedRange(state.brightness, 0, 200)) setAdjust("brightness", state.brightness);
+      if (storedRange(state.blueOpacity, 0, 100)) setBlueOpacity(state.blueOpacity);
+      if (storedRange(state.blur, 0, 80)) setGlow("blur", state.blur);
+      if (storedRange(state.spread, 0, 40)) setGlow("spread", state.spread);
+      if (storedRange(state.opacity, 0, 100)) setGlow("opacity", state.opacity);
+    }
+
+    const SHARE_PAGE = "https://owreford.github.io/techstack/";
+
+    function sharePage() {
+      if (location.protocol === "http:" || location.protocol === "https:") return location.href.split("#")[0];
+      return SHARE_PAGE;
+    }
+
+    async function shareTool() {
+      const link = sharePage() + "#" + encodeCompactShare();
+      await copyText(link);
+      showSharePopup();
+    }
+
+    document.getElementById("share").addEventListener("click", function () {
+      shareTool().catch(function () {});
+    });
+
+    function sharedPreset(item) {
+      if (!item || typeof item.name !== "string" || !item.name.trim() || item.name === DEFAULT_PRESET.name) return null;
+      if (!storedRange(item.saturation, 0, 200) || !storedRange(item.hue, -180, 180)) return null;
+      if (!storedRange(item.contrast, 0, 200) || !storedRange(item.brightness, 0, 200)) return null;
+      if (!storedRange(item.blueOpacity, 0, 100) || !storedRange(item.blur, 0, 80)) return null;
+      if (!storedRange(item.spread, 0, 40) || !storedRange(item.opacity, 0, 100)) return null;
+      return {
+        name: item.name,
+        saturation: item.saturation,
+        hue: item.hue,
+        contrast: item.contrast,
+        brightness: item.brightness,
+        blueOpacity: item.blueOpacity,
+        blur: item.blur,
+        spread: item.spread,
+        opacity: item.opacity
+      };
+    }
+
+    function sharedPosition(item) {
+      if (!item || typeof item.name !== "string" || !item.name.trim() || item.name === DEFAULT_POSITION.name) return null;
+      if (!isStoredInt(item.x) || !isStoredInt(item.y) || !isStoredInt(item.z) || !storedDistance(item.distance)) return null;
+      return { name: item.name, x: item.x, y: item.y, z: item.z, distance: item.distance };
+    }
+
+    async function restoreSharedLink() {
+      if (!location.hash || location.hash.length < 2) return;
+      const state = await decodeShare(location.hash.slice(1));
+      if (!state) return;
+      if (Array.isArray(state.images)) {
+        for (const item of images) {
+          if (item.url.indexOf("blob:") === 0) URL.revokeObjectURL(item.url);
+        }
+        images = [];
+        for (const image of state.images.slice(0, MAX_IMAGES)) {
+          if (!image || typeof image.name !== "string" || typeof image.src !== "string" || !image.src) continue;
+          trackImage(image.name, image.src);
+          images[images.length - 1].visible = image.visible !== false;
+        }
+        renderList();
+        renderPreview();
+        syncImageCount();
+      }
+      if (isStoredInt(state.x)) commit("x", state.x, "saved");
+      if (isStoredInt(state.y)) commit("y", state.y, "saved");
+      if (isStoredInt(state.z)) commit("z", state.z, "saved");
+      if (storedDistance(state.distance)) applyDistance(state.distance);
+      applySharedAdjust(state);
+      if (Array.isArray(state.presets)) {
+        for (const item of state.presets) {
+          const preset = sharedPreset(item);
+          if (preset && !presetNameIsTaken(preset.name)) presets.push(preset);
+        }
+        try { localStorage.setItem(PRESET_KEY, JSON.stringify(presets)); } catch (error) {}
+        renderPresets(savedPresets.value);
+      }
+      if (Array.isArray(state.positions)) {
+        for (const item of state.positions) {
+          const position = sharedPosition(item);
+          if (position && !nameIsTaken(position.name)) positions.push(position);
+        }
+        try { persistPositions(); } catch (error) {}
+        renderPositions(savedPositions.value);
+      }
+    }
+
+    restoreSharedLink();
+  </script>
+</body>
+</html>
